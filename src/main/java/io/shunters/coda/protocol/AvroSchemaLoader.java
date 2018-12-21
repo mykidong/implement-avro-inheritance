@@ -1,10 +1,13 @@
 package io.shunters.coda.protocol;
 
 import org.apache.avro.Schema;
-import org.apache.commons.io.Charsets;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.core.io.support.ResourcePatternResolver;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -74,25 +77,41 @@ public class AvroSchemaLoader {
 
     private AvroSchemaLoader(String pathDir)
     {
+        List<String> files = readFileNamesFromClasspath(pathDir);
+
+        List<String> jsonList = new ArrayList<>();
+
+        files.stream().forEach(f -> {
+            String path = pathDir + "/" + f;
+
+            String json = fileToString(path);
+
+            jsonList.add(json);
+        });
+
+        resolveSchemaRepeatedly(jsonList);
+    }
+
+    private List<String> readFileNamesFromClasspath(String pathDir)
+    {
+        List<String> fileNames = new ArrayList<>();
+
+        ClassLoader cl = this.getClass().getClassLoader();
+        ResourcePatternResolver resolver = new PathMatchingResourcePatternResolver(cl);
         try {
-            List<String> files = IOUtils.readLines(this.getClass().getResourceAsStream(pathDir), Charsets.UTF_8);
 
-            List<String> jsonList = new ArrayList<>();
+            Resource[] resources = resolver.getResources("classpath*:" + pathDir + "/*.avsc");
+            for (Resource resource : resources) {
+                fileNames.add(resource.getFilename());
+            }
 
-            files.stream().forEach(f -> {
-                String path = pathDir + "/" + f;
-
-                String json = fileToString(path);
-
-                jsonList.add(json);
-            });
-
-            resolveSchemaRepeatedly(jsonList);
-
+            return fileNames;
         }catch (IOException e)
         {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
+
+        return fileNames;
     }
 
     private void resolveSchemaRepeatedly(List<String> jsonList) {
@@ -131,7 +150,7 @@ public class AvroSchemaLoader {
 
 
     private String fileToString(String filePath) {
-        try (InputStream inputStream = this.getClass().getResourceAsStream(filePath)) {
+        try (InputStream inputStream = new ClassPathResource(filePath).getInputStream())  {
             return IOUtils.toString(inputStream);
         } catch (IOException ie) {
             throw new RuntimeException(ie);
